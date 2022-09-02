@@ -53,31 +53,37 @@ func New(gmailSrv gmail.GetFiverrMessages) (*Bot, error) {
 	return &Bot{bot: bot, gmailSrv: gmailSrv, chatID: int64(chatID)}, nil
 }
 
+func (b *Bot) fiverrMsg(ctx context.Context) {
+	msgs := b.gmailSrv.GetNewFiverrMsg(ctx)
+
+	for _, msg := range msgs {
+		botMsg := tgbotapi.NewMessage(b.chatID, fmt.Sprintf("New message!\n%s", msg))
+		sentMsg, err := b.bot.Send(botMsg)
+		if err != nil {
+			logger.GetLogger(ctx).Errorf("can't send msg, err: %v", err)
+		}
+
+		edit := tgbotapi.EditMessageTextConfig{
+			BaseEdit: tgbotapi.BaseEdit{
+				ChatID:    b.chatID,
+				MessageID: sentMsg.MessageID,
+			},
+			Text:      fmt.Sprintf("New message!\n%s", msg),
+			ParseMode: "HTML",
+		}
+		if _, err := b.bot.Send(edit); err != nil {
+			logger.GetLogger(ctx).Errorf("can't send msg, err: %v", err)
+		}
+	}
+}
+
 func (b *Bot) StartTicker(ctx context.Context) {
+	b.fiverrMsg(ctx)
+
 	ticker := time.NewTicker(time.Minute * 20)
 
 	for range ticker.C {
-		msgs := b.gmailSrv.GetNewFiverrMsg(ctx)
-
-		for _, msg := range msgs {
-			botMsg := tgbotapi.NewMessage(b.chatID, fmt.Sprintf("New message!\n%s", msg))
-			sentMsg, err := b.bot.Send(botMsg)
-			if err != nil {
-				logger.GetLogger(ctx).Errorf("can't send msg, err: %v", err)
-			}
-
-			edit := tgbotapi.EditMessageTextConfig{
-				BaseEdit: tgbotapi.BaseEdit{
-					ChatID:    b.chatID,
-					MessageID: sentMsg.MessageID,
-				},
-				Text:      fmt.Sprintf("New message!\n%s", msg),
-				ParseMode: "HTML",
-			}
-			if _, err := b.bot.Send(edit); err != nil {
-				logger.GetLogger(ctx).Errorf("can't send msg, err: %v", err)
-			}
-		}
+		b.fiverrMsg(ctx)
 	}
 }
 
