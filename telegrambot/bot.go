@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/elizarpif/logger"
+	"github.com/elizarpif/telegrambot/gmail"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"telegrambot/gmail"
 )
 
 type Bot struct {

@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
+
 	"github.com/elizarpif/logger"
-	"telegrambot/gmail"
-	"telegrambot/telegrambot"
+	"github.com/elizarpif/telegrambot/gmail"
+	"github.com/elizarpif/telegrambot/telegrambot"
 )
 
 func main() {

@@ -1,4 +1,4 @@
-module telegrambot
+module github.com/elizarpif/telegrambot
 
 go 1.18
 
