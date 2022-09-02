@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/elizarpif/logger"
@@ -21,12 +22,12 @@ type Bot struct {
 
 // Retrieves a token from a local file.
 func tokenFromFile(file string) (string, error) {
-	f, err := os.ReadFile(file)
+	s, err := os.ReadFile(file)
 	if err != nil {
 		return "", err
 	}
 
-	return string(f), err
+	return strings.TrimSpace(string(s)), err
 }
 
 func New(gmailSrv gmail.GetFiverrMessages) (*Bot, error) {
