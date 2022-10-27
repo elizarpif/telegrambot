@@ -1,3 +1,8 @@
 ## telegrambot
 
-bot sends unread messages from Fiverr
+### Nonsense
+Игра "Чепуха"
+
+Код написан ночью, поэтому там жутко
+
+Проблема: нужно реализовать очищение мап

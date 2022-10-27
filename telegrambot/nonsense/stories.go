@@ -1,27 +1,37 @@
 package nonsense
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 const partsNum = 7
 
-type userStory struct {
-	user      int64
-	username  string
-	parts     [partsNum]string
+type game struct {
+	users     []*userStory
 	partIndex int
+	updatedAt time.Time
+}
+
+type userStory struct {
+	user     int64
+	username string
+	parts    [partsNum]string
 }
 
 func newUserStory(user int64, username string) *userStory {
-	return &userStory{user: user, username: username, partIndex: 0}
+	return &userStory{user: user, username: username}
 }
 
 func (u *userStory) clear() {
-	u.partIndex = 0
 	u.parts = [7]string{}
 }
 
 var questions = [7]string{
-	"Кто?", "С кем?", "где?",
+	"Кто?",
+	"С кем?",
+	"Где?",
 	"Когда?",
 	"Что делали?",
 	"Что им сказали?",
@@ -49,14 +59,17 @@ func oneStory(indexUser int, stories []*userStory) string {
 	for i := 0; i < partsNum; i++ {
 		ind := (indexUser + i) % len(stories)
 
-		_, err := b.WriteString(stories[ind].parts[i])
-
+		_, err := b.WriteString(fmt.Sprintf("(%s) ", questions[i]))
 		if err != nil {
 			return ""
 		}
 
-		_, err = b.WriteString(" ")
+		_, err = b.WriteString(stories[ind].parts[i])
+		if err != nil {
+			return ""
+		}
 
+		_, err = b.WriteString("\n")
 		if err != nil {
 			return ""
 		}
