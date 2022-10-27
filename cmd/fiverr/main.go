@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
+	"github.com/elizarpif/telegrambot/telegrambot/fiverr"
 
 	"github.com/elizarpif/logger"
 	"github.com/elizarpif/telegrambot/gmail"
-	"github.com/elizarpif/telegrambot/telegrambot"
 )
 
 func main() {
@@ -17,7 +17,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	bot, err := telegrambot.New(srv)
+	bot, err := fiverr.New(srv)
 	if err != nil {
 		log.Fatal(err)
 	}
