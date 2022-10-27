@@ -89,7 +89,7 @@ func (b *Bot) processMessage(ctx context.Context, update tgbotapi.Update) {
 	if uid, ok := b.users[chatID]; ok {
 		if game, ok := b.usersInGame[uid]; ok {
 			for i := range game.users {
-				if game.users[i].user == chatID {
+				if game.users[i].chatID == chatID {
 					game.users[i].parts[game.partIndex] = update.Message.Text // todo ++partindex in processgame
 					game.updatedAt = time.Now()
 				}
@@ -194,7 +194,7 @@ func (t *Bot) gameInProcess(ctx context.Context, uid uuid.UUID) {
 
 	questionNum := 0
 	for _, u := range usersInGame.users {
-		t.sendMessage(ctx, u.user, questions[0])
+		t.sendMessage(ctx, u.chatID, questions[0])
 	}
 
 	for questionNum < partsNum {
@@ -213,7 +213,7 @@ func (t *Bot) gameInProcess(ctx context.Context, uid uuid.UUID) {
 				break
 			}
 			for _, u := range usersInGame.users {
-				t.sendMessage(ctx, u.user, questions[questionNum])
+				t.sendMessage(ctx, u.chatID, questions[questionNum])
 			}
 
 			usersInGame.partIndex++
@@ -226,7 +226,7 @@ func (t *Bot) gameInProcess(ctx context.Context, uid uuid.UUID) {
 
 	for i, s := range stories {
 		for _, u := range usersInGame.users {
-			t.sendMessage(ctx, u.user, fmt.Sprintf("%d-ая история: \n%s", i+1, s))
+			t.sendMessage(ctx, u.chatID, fmt.Sprintf("%d-ая история: \n%s", i+1, s))
 		}
 	}
 }

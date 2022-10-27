@@ -1,6 +1,6 @@
 module github.com/elizarpif/telegrambot
 
-go 1.18
+go 1.19
 
 require (
 	github.com/elizarpif/logger v0.1.1

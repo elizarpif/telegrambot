@@ -9,19 +9,21 @@ import (
 const partsNum = 7
 
 type game struct {
-	users     []*userStory
+	users []*userStory
+	// индекс вопроса, на котором остановились пользователи
 	partIndex int
+	// время последнего апдейта
 	updatedAt time.Time
 }
 
 type userStory struct {
-	user     int64
+	chatID   int64
 	username string
 	parts    [partsNum]string
 }
 
 func newUserStory(user int64, username string) *userStory {
-	return &userStory{user: user, username: username}
+	return &userStory{chatID: user, username: username}
 }
 
 func (u *userStory) clear() {
