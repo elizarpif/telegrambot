@@ -12,7 +12,7 @@ type userStory struct {
 }
 
 func newUserStory(user int64, username string) *userStory {
-	return &userStory{user: user, username: username}
+	return &userStory{user: user, username: username, partIndex: 0}
 }
 
 func (u *userStory) clear() {

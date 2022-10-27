@@ -44,6 +44,7 @@ func New() (*Bot, error) {
 	}
 
 	bot.Debug = true
+
 	return &Bot{bot: bot,
 			usersInGame:  make(map[uuid.UUID][]*userStory),
 			users:        make(map[int64]uuid.UUID),
@@ -104,17 +105,26 @@ func (b *Bot) processMessage(update tgbotapi.Update) {
 		if err != nil {
 			b.sendMessage(chatID, "Это не правильный код, код должен быть в формате uuid, например, \"1e4e4171-f1e1-4a41-a637-a11b13d10175\"")
 		} else {
-			b.usersInGame[uid] = append(b.usersInGame[uid], &userStory{
-				user:      chatID,
-				parts:     [7]string{},
-				partIndex: 0,
-			})
+			user := newUserStory(chatID, update.Message.Chat.UserName)
+
+			b.usersInGame[uid] = append(b.usersInGame[uid], user)
 			b.users[chatID] = uid
+
 			b.sendMessage(chatID, "Вы успешно подключились к игре!")
 		}
 
 		delete(b.waitUidUsers, chatID)
 	}
+}
+
+func (t *Bot) getUserNames(uid uuid.UUID) []string {
+	var res []string
+
+	for _, v := range t.usersInGame[uid] {
+		res = append(res, v.username)
+	}
+
+	return res
 }
 
 func (t *Bot) command(update tgbotapi.Update) {
@@ -134,17 +144,14 @@ func (t *Bot) command(update tgbotapi.Update) {
 		msg.Text = fmt.Sprintf("Ваш код игры: %s"+
 			"\nСкопируйте этот id и перешлите своим игрокам, чтобы попасть в одну игру", uid.String())
 
-		t.usersInGame[uid] = []*userStory{
-			{
-				user:  chatID,
-				parts: [7]string{},
-			},
-		}
+		user := newUserStory(chatID, update.Message.Chat.UserName)
+
+		t.usersInGame[uid] = []*userStory{user}
 		t.users[chatID] = uid
 	case "start_game":
 		uid, ok := t.users[chatID]
 		if ok {
-			msg.Text = fmt.Sprintf("Отлично! Мы начинаем игру ЧЕПУХА!\nТекущее кол-во игроков: %d", len(t.usersInGame[uid]))
+			msg.Text = fmt.Sprintf("Отлично! Мы начинаем игру ЧЕПУХА!\nТекущее кол-во игроков: %d\n%v", len(t.usersInGame[uid]), t.getUserNames(uid))
 
 			defer func() {
 				go t.gameInProcess(uid) // запустить игру в конце
@@ -155,7 +162,7 @@ func (t *Bot) command(update tgbotapi.Update) {
 	case "status":
 		uid, ok := t.users[chatID]
 		if ok {
-			msg.Text = fmt.Sprintf("Текущее кол-во игроков: %d", len(t.usersInGame[uid]))
+			msg.Text = fmt.Sprintf("Текущее кол-во игроков: %d\n%v", len(t.usersInGame[uid]), t.getUserNames(uid))
 		} else {
 			msg.Text = "К сожалению, вы не участвуете ни в какой игре. Сгенерируйте свой код игры или присоединитесь к игре"
 		}
