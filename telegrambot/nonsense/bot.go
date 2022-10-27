@@ -74,10 +74,10 @@ func (b *Bot) Start(ctx context.Context) {
 	}
 }
 
-func (t *Bot) sendMessage(ctx context.Context, chatID int64, msg string) {
+func (b *Bot) sendMessage(ctx context.Context, chatID int64, msg string) {
 	botMsg := tgbotapi.NewMessage(chatID, msg)
 
-	_, err := t.bot.Send(botMsg)
+	_, err := b.bot.Send(botMsg)
 	if err != nil {
 		logger.GetLogger(ctx).Errorf("can't send msg, err: %v", err)
 	}
@@ -114,24 +114,24 @@ func (b *Bot) processMessage(ctx context.Context, update tgbotapi.Update) {
 	}
 }
 
-func (t *Bot) getUserNames(uid uuid.UUID) []string {
+func (b *Bot) getUserNames(uid uuid.UUID) []string {
 	var res []string
 
-	for _, v := range t.usersInGame[uid].users {
+	for _, v := range b.usersInGame[uid].users {
 		res = append(res, v.username)
 	}
 
 	return res
 }
 
-func (t *Bot) command(ctx context.Context, update tgbotapi.Update) {
+func (b *Bot) command(ctx context.Context, update tgbotapi.Update) {
 	chatID := update.Message.Chat.ID
 	text := ""
 
 	switch update.Message.Command() {
 	case "enter_game_code":
 		text = "Напишите ваш код игры"
-		t.waitUidUsers[chatID] = struct{}{}
+		b.waitUidUsers[chatID] = struct{}{}
 
 	case "generate_game_code":
 		uid := uuid.New()
@@ -140,38 +140,38 @@ func (t *Bot) command(ctx context.Context, update tgbotapi.Update) {
 
 		user := newUserStory(chatID, update.Message.Chat.UserName)
 
-		t.usersInGame[uid] = &game{users: []*userStory{user}}
-		t.users[chatID] = uid
+		b.usersInGame[uid] = &game{users: []*userStory{user}}
+		b.users[chatID] = uid
 	case "start_game":
-		uid, ok := t.users[chatID]
+		uid, ok := b.users[chatID]
 		if ok {
 			text = fmt.Sprintf("Отлично! Мы начинаем игру ЧЕПУХА!\nТекущее кол-во игроков: %d\n%v",
-				len(t.usersInGame[uid].users), t.getUserNames(uid))
+				len(b.usersInGame[uid].users), b.getUserNames(uid))
 
 			defer func() {
-				go t.gameInProcess(ctx, uid) // запустить игру в конце
+				go b.gameInProcess(ctx, uid) // запустить игру в конце
 			}()
 		} else {
 			text = "К сожалению, вы не участвуете ни в какой игре. Сгенерируйте свой код игры или присоединитесь к игре"
 		}
 	case "status":
-		uid, ok := t.users[chatID]
+		uid, ok := b.users[chatID]
 		if ok {
-			text = fmt.Sprintf("Текущее кол-во игроков: %d\n%v", len(t.usersInGame[uid].users), t.getUserNames(uid))
+			text = fmt.Sprintf("Текущее кол-во игроков: %d\n%v", len(b.usersInGame[uid].users), b.getUserNames(uid))
 		} else {
 			text = "К сожалению, вы не участвуете ни в какой игре. Сгенерируйте свой код игры или присоединитесь к игре"
 		}
 	case "restart":
-		uid, ok := t.users[chatID]
+		uid, ok := b.users[chatID]
 		if ok {
-			for _, v := range t.usersInGame[uid].users {
+			for _, v := range b.usersInGame[uid].users {
 				v.clear()
 			}
 
-			text = fmt.Sprintf("Отлично! Мы начинаем игру ЧЕПУХА!\nТекущее кол-во игроков: %d", len(t.usersInGame[uid].users))
+			text = fmt.Sprintf("Отлично! Мы начинаем игру ЧЕПУХА!\nТекущее кол-во игроков: %d", len(b.usersInGame[uid].users))
 
 			defer func() {
-				go t.gameInProcess(ctx, uid) // запустить игру в конце
+				go b.gameInProcess(ctx, uid) // запустить игру в конце
 			}()
 		}
 	case "help", "start":
@@ -185,16 +185,16 @@ func (t *Bot) command(ctx context.Context, update tgbotapi.Update) {
 		text = "I don't know that command"
 	}
 
-	t.sendMessage(ctx, chatID, text)
+	b.sendMessage(ctx, chatID, text)
 }
 
 // todo переписать этот жуткий алгоритм, написанный посередь ночи
-func (t *Bot) gameInProcess(ctx context.Context, uid uuid.UUID) {
-	usersInGame, _ := t.usersInGame[uid]
+func (b *Bot) gameInProcess(ctx context.Context, uid uuid.UUID) {
+	usersInGame, _ := b.usersInGame[uid]
 
 	questionNum := 0
 	for _, u := range usersInGame.users {
-		t.sendMessage(ctx, u.chatID, questions[0])
+		b.sendMessage(ctx, u.chatID, questions[0])
 	}
 
 	for questionNum < partsNum {
@@ -213,7 +213,7 @@ func (t *Bot) gameInProcess(ctx context.Context, uid uuid.UUID) {
 				break
 			}
 			for _, u := range usersInGame.users {
-				t.sendMessage(ctx, u.chatID, questions[questionNum])
+				b.sendMessage(ctx, u.chatID, questions[questionNum])
 			}
 
 			usersInGame.partIndex++
@@ -226,7 +226,7 @@ func (t *Bot) gameInProcess(ctx context.Context, uid uuid.UUID) {
 
 	for i, s := range stories {
 		for _, u := range usersInGame.users {
-			t.sendMessage(ctx, u.chatID, fmt.Sprintf("%d-ая история: \n%s", i+1, s))
+			b.sendMessage(ctx, u.chatID, fmt.Sprintf("%d-ая история: \n%s", i+1, s))
 		}
 	}
 }
