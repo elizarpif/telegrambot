@@ -12,8 +12,18 @@ type game struct {
 	users []*userStory
 	// индекс вопроса, на котором остановились пользователи
 	partIndex int
+	inProcess bool
 	// время последнего апдейта
 	updatedAt time.Time
+}
+
+func (g *game) clear() {
+	g.updatedAt = time.Now()
+	g.partIndex = 0
+
+	for _, u := range g.users {
+		u.clear()
+	}
 }
 
 type userStory struct {
