@@ -15,10 +15,9 @@ import (
 type Bot struct {
 	bot *tgbotapi.BotAPI
 
-	usersInGame map[uuid.UUID]*game
-	users       map[int64]uuid.UUID //чтобы понимать у кого какая игра
-
-	waitUidUsers map[int64]struct{}
+	usersInGameSync  *usersInGameNap
+	usersSync        *usersMap //чтобы понимать у кого какая игра
+	waitUidUsersSync *waitUidUsers
 }
 
 // Retrieves a token from a local file.
@@ -44,10 +43,12 @@ func New() (*Bot, error) {
 
 	bot.Debug = true
 
-	return &Bot{bot: bot,
-			usersInGame:  make(map[uuid.UUID]*game),
-			users:        make(map[int64]uuid.UUID),
-			waitUidUsers: make(map[int64]struct{}),
+	return &Bot{
+			bot: bot,
+
+			usersInGameSync:  newUsersInGameNap(),
+			usersSync:        newUsersMap(),
+			waitUidUsersSync: newWaitUidUsers(),
 		},
 		nil
 }
@@ -86,39 +87,57 @@ func (b *Bot) sendMessage(ctx context.Context, chatID int64, msg string) {
 func (b *Bot) processMessage(ctx context.Context, update tgbotapi.Update) {
 	chatID := update.Message.Chat.ID
 
-	if uid, ok := b.users[chatID]; ok {
-		if game, ok := b.usersInGame[uid]; ok {
-			for i := range game.users {
-				if game.users[i].chatID == chatID {
-					game.users[i].parts[game.partIndex] = update.Message.Text // todo ++partindex in processgame
-					game.updatedAt = time.Now()
-				}
-			}
-		}
-	}
-
-	if _, ok := b.waitUidUsers[chatID]; ok {
+	// юзеры которые присылают код для присоединения к игре
+	if _, ok := b.waitUidUsersSync.Load(chatID); ok {
 		uid, err := uuid.Parse(update.Message.Text)
 		if err != nil {
 			b.sendMessage(ctx, chatID, "Это неправильный код, код должен быть в формате uuid, например, \"1e4e4171-f1e1-4a41-a637-a11b13d10175\"")
 		} else {
 			user := newUserStory(chatID, update.Message.Chat.UserName)
 
-			b.usersInGame[uid].users = append(b.usersInGame[uid].users, user)
-			b.users[chatID] = uid
+			if game, ok := b.usersInGameSync.Load(uid); ok {
+				if !ok {
+					logger.GetLogger(ctx).Errorf("can't cast to userStory")
+				} else {
+					game.users = append(game.users, user)
 
-			b.sendMessage(ctx, chatID, "Вы успешно подключились к игре!")
+					b.usersSync.Store(chatID, uid)
+					b.usersInGameSync.Store(uid, game) // store?
+
+					b.sendMessage(ctx, chatID, "Вы успешно подключились к игре!")
+				}
+			}
 		}
 
-		delete(b.waitUidUsers, chatID)
+		b.waitUidUsersSync.Delete(chatID)
+		return
+	}
+
+	// юзеры которые находятся в игре
+	if uid, ok := b.usersSync.Load(chatID); ok {
+		if game, ok := b.usersInGameSync.Load(uid); ok {
+			if !ok {
+				logger.GetLogger(ctx).Errorf("can't cast to userStory")
+			} else {
+				for i := range game.users {
+					if game.users[i].chatID == chatID {
+						game.users[i].parts[game.partIndex] = update.Message.Text // todo ++partindex in processgame
+						game.updatedAt = time.Now()
+					}
+				}
+				b.usersInGameSync.Store(uid, game)
+			}
+		}
 	}
 }
 
 func (b *Bot) getUserNames(uid uuid.UUID) []string {
 	var res []string
 
-	for _, v := range b.usersInGame[uid].users {
-		res = append(res, v.username)
+	if game, ok := b.usersInGameSync.Load(uid); ok {
+		for _, v := range game.users {
+			res = append(res, v.username)
+		}
 	}
 
 	return res
@@ -131,22 +150,34 @@ func (b *Bot) command(ctx context.Context, update tgbotapi.Update) {
 	switch update.Message.Command() {
 	case "enter_game_code":
 		text = "Напишите ваш код игры"
-		b.waitUidUsers[chatID] = struct{}{}
+		b.waitUidUsersSync.Store(chatID)
 
 	case "generate_game_code":
 		uid := uuid.New()
 		text = fmt.Sprintf("Ваш код игры: %s"+
 			"\nСкопируйте этот id и перешлите своим игрокам, чтобы попасть в одну игру", uid.String())
-
 		user := newUserStory(chatID, update.Message.Chat.UserName)
 
-		b.usersInGame[uid] = &game{users: []*userStory{user}}
-		b.users[chatID] = uid
+		b.usersInGameSync.Store(uid, &game{users: []*userStory{user}})
+		b.usersSync.Store(chatID, uid)
+
 	case "start_game":
-		uid, ok := b.users[chatID]
+		uid, ok := b.usersSync.Load(chatID)
 		if ok {
+			game, ok := b.usersInGameSync.Load(uid)
+			if !ok {
+				text = "К сожалению, вы не участвуете ни в какой игре. Сгенерируйте свой код игры или присоединитесь к игре"
+				break
+			}
+			if game.inProcess {
+				text = "Вы уже участвуете в игре"
+				break
+			}
+			game.clear()
+			b.usersInGameSync.Store(uid, game)
+
 			text = fmt.Sprintf("Отлично! Мы начинаем игру ЧЕПУХА!\nТекущее кол-во игроков: %d\n%v",
-				len(b.usersInGame[uid].users), b.getUserNames(uid))
+				len(game.users), b.getUserNames(uid))
 
 			defer func() {
 				go b.gameInProcess(ctx, uid) // запустить игру в конце
@@ -155,20 +186,30 @@ func (b *Bot) command(ctx context.Context, update tgbotapi.Update) {
 			text = "К сожалению, вы не участвуете ни в какой игре. Сгенерируйте свой код игры или присоединитесь к игре"
 		}
 	case "status":
-		uid, ok := b.users[chatID]
+		uid, ok := b.usersSync.Load(chatID)
 		if ok {
-			text = fmt.Sprintf("Текущее кол-во игроков: %d\n%v", len(b.usersInGame[uid].users), b.getUserNames(uid))
+			game, _ := b.usersInGameSync.Load(uid)
+			text = fmt.Sprintf("Текущее кол-во игроков: %d\n%v", len(game.users), b.getUserNames(uid))
 		} else {
 			text = "К сожалению, вы не участвуете ни в какой игре. Сгенерируйте свой код игры или присоединитесь к игре"
 		}
 	case "restart":
-		uid, ok := b.users[chatID]
+		uid, ok := b.usersSync.Load(chatID)
 		if ok {
-			for _, v := range b.usersInGame[uid].users {
-				v.clear()
+			game, ok := b.usersInGameSync.Load(uid)
+			if !ok {
+				text = "К сожалению, вы не участвуете ни в какой игре. Сгенерируйте свой код игры или присоединитесь к игре"
+				break
+			}
+			if game.partIndex != partsNum {
+				text = fmt.Sprintf("Кажется, вы еще не закончили игру, текущий этап: %v", game.partIndex)
+				break
 			}
 
-			text = fmt.Sprintf("Отлично! Мы начинаем игру ЧЕПУХА!\nТекущее кол-во игроков: %d", len(b.usersInGame[uid].users))
+			game.clear()
+			b.usersInGameSync.Store(uid, game)
+
+			text = fmt.Sprintf("Отлично! Мы начинаем игру ЧЕПУХА!\nТекущее кол-во игроков: %d", len(game.users))
 
 			defer func() {
 				go b.gameInProcess(ctx, uid) // запустить игру в конце
@@ -190,17 +231,26 @@ func (b *Bot) command(ctx context.Context, update tgbotapi.Update) {
 
 // todo переписать этот жуткий алгоритм, написанный посередь ночи
 func (b *Bot) gameInProcess(ctx context.Context, uid uuid.UUID) {
-	usersInGame, _ := b.usersInGame[uid]
+	usersInGame, _ := b.usersInGameSync.Load(uid)
 
+	usersInGame.inProcess = true
 	questionNum := 0
+
 	for _, u := range usersInGame.users {
 		b.sendMessage(ctx, u.chatID, questions[0])
 	}
 
-	for questionNum < partsNum {
+	for {
 		allReady := true
 
 		for _, v := range usersInGame.users {
+			if userUid, ok := b.usersSync.Load(v.chatID); ok && uid != userUid {
+				for _, u := range usersInGame.users {
+					b.sendMessage(ctx, u.chatID, fmt.Sprintf("участник %s покинул игру %s и теперь в игре %s. Игра закончена", u.username, uid, userUid))
+				}
+				logger.GetLogger(ctx).Errorf("user left the game")
+				return
+			}
 			//  у всех юзеров должны быть не пустые поля
 			if v.parts[questionNum] == "" {
 				allReady = false
@@ -208,22 +258,26 @@ func (b *Bot) gameInProcess(ctx context.Context, uid uuid.UUID) {
 			}
 		}
 		if allReady {
+			usersInGame.partIndex++
+
 			questionNum++
+
 			if questionNum == partsNum {
 				break
 			}
 			for _, u := range usersInGame.users {
 				b.sendMessage(ctx, u.chatID, questions[questionNum])
 			}
-
-			usersInGame.partIndex++
 		}
 
 		time.Sleep(time.Second)
 	}
 
+	usersInGame.inProcess = false
+	// перемешать ответы в истории
 	stories := generateStories(usersInGame.users)
 
+	// разослать всем юзерам результат
 	for i, s := range stories {
 		for _, u := range usersInGame.users {
 			b.sendMessage(ctx, u.chatID, fmt.Sprintf("%d-ая история: \n%s", i+1, s))
