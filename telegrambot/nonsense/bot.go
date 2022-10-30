@@ -119,6 +119,9 @@ func (b *Bot) processMessage(ctx context.Context, update tgbotapi.Update) {
 			if !ok {
 				logger.GetLogger(ctx).Errorf("can't cast to userStory")
 			} else {
+				if !game.inProcess {
+					return
+				}
 				for i := range game.users {
 					if game.users[i].chatID == chatID {
 						game.users[i].parts[game.partIndex] = update.Message.Text // todo ++partindex in processgame
@@ -258,8 +261,6 @@ func (b *Bot) gameInProcess(ctx context.Context, uid uuid.UUID) {
 			}
 		}
 		if allReady {
-			usersInGame.partIndex++
-
 			questionNum++
 
 			if questionNum == partsNum {
@@ -268,6 +269,8 @@ func (b *Bot) gameInProcess(ctx context.Context, uid uuid.UUID) {
 			for _, u := range usersInGame.users {
 				b.sendMessage(ctx, u.chatID, questions[questionNum])
 			}
+
+			usersInGame.partIndex++
 		}
 
 		time.Sleep(time.Second)
